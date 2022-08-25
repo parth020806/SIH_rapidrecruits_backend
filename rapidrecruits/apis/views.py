@@ -15,6 +15,18 @@ from django.views.decorators.csrf import csrf_exempt
 from datetime import *
 # Create your views here.
 
+
+@api_view(["GET"])
+def dashboard_view(request, username):
+    user = User.objects.get(username = username)
+    college = CollegeInfoModel.objects.get(user = user)
+    employee_count = EmployeeInfoModel.objects.filter(college = college).count()
+    vacancies_count = VacanciesInfoModel.objects.filter(college = college).count()
+    active_employee_count = EmployeeInfoModel.objects.filter(college = college, status = "Active").count()
+    non_active_employee_count = EmployeeInfoModel.objects.filter(college = college, status = "Non Active").count()
+    return Response({"employee_count": employee_count, "vacancies_count": vacancies_count, "active_employee_count": active_employee_count, "non_active_employee_count": non_active_employee_count}, status = 200)
+
+
 # DOCUMENTATION DONE!
 class ApplicantAPIView(APIView):
     # Method to fetch the details of an applicant using username.
@@ -225,47 +237,55 @@ class QualificationAPIView(APIView):
         qualification.delete()
         return Response({"mssg": "qualification deleted successfully"}, status = 200)
 
-class ExperienceAPIView(APIView):
 
-    def get(self, request, username, format = None):
-        applicant = User.objects.get(username = username)
-        experiences = ApplicantExperienceModel.objects.filter(applicant = applicant)
-        result = []
-        for experience in experiences:
-            temp_result = {}
-            temp_result["designation"] = experience.designation
-            temp_result["from_date"] = experience.from_date
-            temp_result["to_date"] = experience.to_date
-            temp_result["institute"] = experience.institute
-            temp_result["details"] = experience.details
-            result.append(temp_result)
-        return Response({"data" : result}, status = 200)
-
-    def post(self, request, username, format = None):
-        user = User.objects.get(username = username)
-        request.data["applicant"] = user
-        ApplicantExperienceModel.objects.create(**request.data)
-        return Response({"mssg" : "experience added successfully"}, status = 202)
+# DOCUMENTATION DONE!
+# Method to get the employee data using the college name and the employee id. We need to mention get in the square brackets else nothing will work.
+@api_view(["GET"])
+def get_employee_by_id(request, college_name, id):
+    if (request.method == "GET"):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        employee = EmployeeInfoModel.objects.get(college = college, id = id)
+        temp_result = employee.__dict__
+        del temp_result["_state"]
+        return Response({"employee" : temp_result}, status = 200)
 
 
-    def put(self, request, username, format = None):
-        applicant = User.objects.get(username = username)
-        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
-        experience.designation = request.data["designation"]
-        experience.from_date = request.data["from_date"]
-        experience.to_date = request.data["to_date"]
-        experience.institute = request.data["institute"]
-        experience.details = request.data["details"]
-        experience.save()
-        return Response({"mssg" : "experience updated successfully"}, status = 204)
+@api_view(["GET"])
+def get_employee_by_empid(request, college_name, empid):
+    if (request.method == "GET"):
+        print (college_name, empid)
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        if (EmployeeInfoModel.objects.filter(college = college, empid = empid).exists()):
+            employee = EmployeeInfoModel.objects.get(college = college, empid = empid)
+            temp_result = employee.__dict__
+            del temp_result["_state"]
+            return Response({"employee" : temp_result}, status = 200)
+        else:
+            return Response({"mssg" : "employee does not exists!"}, status = 404)
 
 
-    def delete(self, request, username, format = None):
-        applicant = User.objects.get(username = username)
-        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
-        experience.delete()
-        return Response({"mssg": "experience deleted successfully"}, status = 200)
-
+# DOCUMENTATION DONE!
+# this api is used to change the status of the employee from active to notice period and mail all the required faculties that recruitment process has been initiated.
+# @api_view(["POST"])
+# def Change_employee_status(request, college_name, id):
+#     if (request.method == "POST"):
+#         user = User.objects.get(username = college_name)
+#         college = CollegeInfoModel.objects.get(user = user)
+#         employee = EmployeeInfoModel.objects.get(college = college, id = id)
+#         employee.status = request.data["status"]
+#         employee.save()
+#         message_name = "Initiate recruitment process"
+#         message_email = "rapidrecruits1.0@gmail.com"
+#         message = "Dear all, Mr./Mrs. {} is about to leave/retire from their position please initiate recruitment process".format(employee.name)
+#         send_mail(
+#             message_name,#subject
+#             message,#message
+#             message_email,#from email
+#             [college.director_mail, college.registrar_mail, college.hod_mail, employee.email, college.user.email],#to email
+#         )
+#         return Response({"mssg": "status changed successfully!"}, status = 204)
 
 
 # DOCUMENTATION DONE!
@@ -381,30 +401,528 @@ class EmployeeAPIView(APIView):
         employee.delete()
         return Response({"mssg": "employee deleted successfully!"}, status = 200)
 
+# DOCUMENTATION DONE!
+# Method to get the vacancies for a particular applicant where the applicant has applied.
+@api_view(["GET"])
+def get_vacancies_for_applicant(request, username):
+    user = User.objects.get(username = username)
+    mappings = VacancyApplicantMapping.objects.filter(applicant = user).order_by('date_of_application')
+    vacancies = []
+    for mapping in mappings:
+        vacancies.append(mapping.vacancy)
+    result = []
+    for vacancy in vacancies:
+        temp_result = {}
+        temp = vacancy.__dict__
+        # print (temp)
+        for key in temp:
+            # This state is the reference object to the college.
+            if (key == "_state"):
+                continue
+            temp_result[key] = temp[key]
+        temp_result["skills"] = vacancy.skills.names()
+        temp_result["college_name"] = vacancy.college.user.username
+        temp_result["location"] = vacancy.college.location
+        temp_result["website"] = vacancy.college.website
+        result.append(temp_result)
+    return Response({"vacancies" : result}, status = 200)
 
 # DOCUMENTATION DONE!
-# Method to get the employee data using the college name and the employee id. We need to mention get in the square brackets else nothing will work.
+# Method to get the applicants who have applied for a particular vacancy using vacancy id.
 @api_view(["GET"])
-def get_employee_by_id(request, college_name, id):
-    if (request.method == "GET"):
-        user = User.objects.get(username = college_name)
-        college = CollegeInfoModel.objects.get(user = user)
-        employee = EmployeeInfoModel.objects.get(college = college, id = id)
-        temp_result = employee.__dict__
-        del temp_result["_state"]
-        return Response({"employee" : temp_result}, status = 200)
+def get_applicants_for_vacancy(request, id):
+    mappings = VacancyApplicantMapping.objects.filter(vacancy = id).order_by('date_of_application')
+    applicants = []
+    status = {}
+    for mapping in mappings:
+        applicants.append(mapping.applicant)
+        status[mapping.applicant] = mapping.status
+    result = []
+    for applicant in applicants:
+        applicant_info_dict = {}
+        personal_details_dict = {}
+        personal_details_dict["username"] = applicant.username
+        personal_details_dict["email"] = applicant.email
+        # Getting the personal information of the applicant.
+        personal_info_obj = ApplicantInfoModel.objects.get(user = applicant)
+        temp = personal_info_obj.__dict__
+        for key in temp:
+            if (key == "_state"):
+                continue
+            personal_details_dict[key] = temp[key]
+        personal_details_dict["skillset"] = personal_info_obj.skillset.names()
+        applicant_info_dict["personal details"] = personal_details_dict
+        # Getting the qualifications of the applicant.
+        qualifications = ApplicantQualificationModel.objects.filter(applicant = applicant)
+        all_qualifications = []
+        for qualification in qualifications:
+            temp_qualification = {}
+            temp_qualification["qualification_title"] = qualification.qualification_title
+            temp_qualification["institute"] = qualification.institute
+            temp_qualification["passing_year"] = qualification.passing_year
+            temp_qualification["marks"] = qualification.marks
+            all_qualifications.append(temp_qualification)
+        applicant_info_dict["qualification details"] = all_qualifications
+        # Getting the experience of the applicant.
+        experiences = ApplicantExperienceModel.objects.filter(applicant = applicant)
+        all_experiences = []
+        for experience in experiences:
+            temp_experience = {}
+            temp_experience["designation"] = experience.designation
+            temp_experience["from_date"] = experience.from_date
+            temp_experience["to_date"] = experience.to_date
+            temp_experience["institute"] = experience.institute
+            temp_experience["details"] = experience.details
+            all_experiences.append(temp_experience)
+        applicant_info_dict["experience details"] = all_experiences
+        # Getting the status of employee for the vacancy.
+        applicant_info_dict["status"] = status[applicant]
+        result.append(applicant_info_dict)
+    return Response({"applicants" : result}, status = 200)
+
+
+# Method to get all the vacancies which require similar skills which the user has removed already applied vacancies..
+@api_view(["GET"])
+def search_matching_vacancies(request, username):
+    user = User.objects.get(username = username)
+    applicant = ApplicantInfoModel.objects.get(user = user)
+    # Here, we are getting the id's of the vacancies which the applicant has already applied for.
+    applied_vacancies_mapping = VacancyApplicantMapping.objects.filter(applicant = user)
+    applied_vacancies_id = []
+    for mapping in applied_vacancies_mapping:
+        applied_vacancies_id.append(mapping.vacancy.id)
+    vacancies = VacanciesInfoModel.objects.filter(skills__name__in = applicant.skillset.names()).distinct()
+    # Now, we will exclude those vacancies from the resultant query set which the applicant has already applied for.
+    vacancies = vacancies.exclude(id__in = applied_vacancies_id)
+    result = []
+    for vacancy in vacancies:
+        temp_result = {}
+        temp = vacancy.__dict__
+        # print (temp)
+        for key in temp:
+            # This state is the reference object to the college.
+            if (key == "_state"):
+                continue
+            temp_result[key] = temp[key]
+        temp_result["skills"] = vacancy.skills.names()
+        temp_result["college_name"] = vacancy.college.user.username
+        temp_result["location"] = vacancy.college.location
+        temp_result["website"] = vacancy.college.website
+        result.append(temp_result)
+    return Response({"vacancies" : result}, status = 200)
+
+
+# Method to search applicants based on the skills required by the vacancies.
+@api_view(["GET"])
+def search_matching_applicants(request, id):
+    vacancy = VacanciesInfoModel.objects.get(id = id)
+    applicants_obj = ApplicantInfoModel.objects.filter(skillset__name__in = vacancy.skills.names()).distinct()
+    # Get the applicants who have already applied for the vacancy.
+    mapping_queryset = VacancyApplicantMapping.objects.filter(vacancy = vacancy)
+    applied_users = []
+    for mapping in mapping_queryset:
+        applied_users.append(mapping.applicant)
+    # Removing the applicants who have already applied for the vacancy.
+    applicants_obj = applicants_obj.exclude(user__in = applied_users)
+
+    applicants = []
+    for applicant_obj in applicants_obj:
+        applicants.append(User.objects.get(username = applicant_obj.user.username))
+    result = []
+    for applicant in applicants:
+        applicant_info_dict = {}
+        personal_details_dict = {}
+        personal_details_dict["username"] = applicant.username
+        personal_details_dict["email"] = applicant.email
+        # Getting the personal information of the applicant.
+        personal_info_obj = ApplicantInfoModel.objects.get(user = applicant)
+        temp = personal_info_obj.__dict__
+        for key in temp:
+            if (key == "_state"):
+                continue
+            personal_details_dict[key] = temp[key]
+        applicant_info_dict["personal details"] = personal_details_dict
+        personal_details_dict["skillset"] = personal_info_obj.skillset.names()
+        # Getting the qualifications of the applicant.
+        qualifications = ApplicantQualificationModel.objects.filter(applicant = applicant)
+        all_qualifications = []
+        for qualification in qualifications:
+            temp_qualification = {}
+            temp_qualification["qualification_title"] = qualification.qualification_title
+            temp_qualification["institute"] = qualification.institute
+            temp_qualification["passing_year"] = qualification.passing_year
+            temp_qualification["marks"] = qualification.marks
+            all_qualifications.append(temp_qualification)
+        applicant_info_dict["qualification details"] = all_qualifications
+        # Getting the experience of the applicant.
+        experiences = ApplicantExperienceModel.objects.filter(applicant = applicant)
+        all_experiences = []
+        for experience in experiences:
+            temp_experience = {}
+            temp_experience["designation"] = experience.designation
+            temp_experience["from_date"] = experience.from_date
+            temp_experience["to_date"] = experience.to_date
+            temp_experience["institute"] = experience.institute
+            temp_experience["details"] = experience.details
+            all_experiences.append(temp_experience)
+        applicant_info_dict["experience details"] = all_experiences
+        result.append(applicant_info_dict)
+    return Response({"applicants" : result}, status = 200)
 
 
 @api_view(["GET"])
-def get_employee_by_empid(request, college_name, empid):
-    if (request.method == "GET"):
-        print (college_name, empid)
+def get_vacancy_by_id(request, id):
+    vacancy = VacanciesInfoModel.objects.get(id = id)
+    temp_result = {}
+    temp = vacancy.__dict__
+    # print (temp)
+    for key in temp:
+        # This state is the reference object to the college.
+        if (key == "_state"):
+            continue
+        temp_result[key] = temp[key]
+    temp_result["skills"] = vacancy.skills.names()
+    temp_result["college_name"] = vacancy.college.user.username
+    temp_result["location"] = vacancy.college.location
+    temp_result["website"] = vacancy.college.website
+    flag = False
+    if (RecruitmentCommitteeInfoModel.objects.filter(vacancy = vacancy).exists()):
+        flag = True
+    temp_result ["recruitment_committee"] = flag
+    return Response({"vacancy" : temp_result}, status = 200)
+
+# removed already applied vacancies.
+@api_view(["GET"])
+def get_all_vacancies_for_applicant(request, username):
+        vacancies = VacanciesInfoModel.objects.all()
+        user = User.objects.get(username = username)
+        # Here, we are getting the id's of the vacancies which the applicant has already applied for.
+        applied_vacancies_mapping = VacancyApplicantMapping.objects.filter(applicant = user)
+        applied_vacancies_id = []
+        for mapping in applied_vacancies_mapping:
+            applied_vacancies_id.append(mapping.vacancy.id)
+        # Now, we will exclude those vacancies from the resultant query set which the applicant has already applied for.
+        vacancies = vacancies.exclude(id__in = applied_vacancies_id)
+        result = []
+        for vacancy in vacancies:
+            temp_result = {}
+            temp = vacancy.__dict__
+            print (temp)
+            for key in temp:
+                print (key)
+                # This state is the reference object to the college.
+                if (key == "_state"):
+                    continue
+                temp_result[key] = temp[key]
+            temp_result["skills"] = vacancy.skills.names()
+            temp_result["college_name"] = vacancy.college.user.username
+            temp_result["location"] = vacancy.college.location
+            temp_result["website"] = vacancy.college.website
+            flag = False
+            if (RecruitmentCommitteeInfoModel.objects.filter(vacancy = vacancy).exists()):
+                flag = True
+            temp_result ["recruitment_committee"] = flag
+            result.append(temp_result)
+        return Response({"vacancies" : result}, status = 200)
+
+
+
+# DOCUMENTATION DONE!
+@api_view(["POST"])
+def apply_for_vacancy(request, username):
+    request.data["applicant"] = User.objects.get(username = username)
+    request.data["vacancy"] = VacanciesInfoModel.objects.get(id = request.data["id"])
+    request.data["status"] = "under review"
+    del request.data["id"]
+    request.data["date_of_application"] = datetime.now()
+    VacancyApplicantMapping.objects.create(**request.data)
+    return Response({"mssg" : "Applied for the vacancy successfully!"}, status = 200)
+
+
+# Using this function we can change acncstatus of the applicant for a particular vacacncy.
+@api_view(["PUT"])
+def change_status_of_applicant(request, id, username):
+    vacancy = VacanciesInfoModel.objects.get(id = id)
+    applicant = User.objects.get(username = username)
+    mapping = VacancyApplicantMapping.objects.get(vacancy = vacancy, applicant = applicant)
+    mapping.status = request.data["status"]
+    mapping.save()
+    if(mapping.status == "rejected"):
+        message_name = "Sorry"
+        message_email = "rapidrecruits1.0@gmail.com"
+        message = "Rejected"
+        send_mail(
+            message_name,#subject
+            message,#message
+            message_email,#from email
+            [applicant.email]#to email
+        )
+    elif(mapping.status == "hired"):
+        message_name = "Congratulations"
+        message_email = "rapidrecruits1.0@gmail.com"
+        message = "Selected"
+        send_mail(
+            message_name,#subject
+            message,#message
+            message_email,#from email
+            [applicant.email]#to email
+        )
+    elif(mapping.status == "meet scheduled"):
+        message_name = "Meeting Scheduled"
+        message_email = "rapidrecruits1.0@gmail.com"
+        message = "Congratulations ,  you are shortlisted. Meeting details is shared below "
+        send_mail(
+            message_name,#subject
+            message,#message
+            message_email,#from email
+            [applicant.email]#to email
+        )
+    return Response({"mssg" : "Status updated successfully"}, status = 200)
+
+
+# Using this API we can approach the applicant we are interested in.
+@api_view(["POST"])
+def approach_applicant(request, username):
+    user = User.objects.get(username = username)
+    emailid = user.email
+    # print (user.email)
+    link = request.data["link"]
+    vacancy_id = request.data["id"]
+    message_name = "Member of recruitement Committee"
+    message_email = "rapidrecruits1.0@gmail.com"
+    message = "Your profile looks suitable for this vacancy. If interested please apply at the link {} , Vacancy Id {}".format(link, vacancy_id)
+    send_mail(
+        message_name,#subject
+        message,#message
+        message_email,#from email
+        [emailid]#to email
+    )
+    return Response({"mssg": "mail sent successfully"}, status = 200)
+
+# DOCUMENTATION DONE!
+class VacanciesAPIView(APIView):
+
+    # Method to get all the vacancies posted by a particular college using college name or to get all the vacancies present in the system if college not given.
+    def get(self, request, college_name = None, format = None):
+        vacancies = VacanciesInfoModel.objects.all()
+        if (college_name):
+            user = User.objects.get(username = college_name)
+            college = CollegeInfoModel.objects.get(user = user)
+            vacancies = vacancies.filter(college = college)
+        result = []
+        for vacancy in vacancies:
+            temp_result = {}
+            temp = vacancy.__dict__
+            print (temp)
+            for key in temp:
+                print (key)
+                # This state is the reference object to the college.
+                if (key == "_state"):
+                    continue
+                temp_result[key] = temp[key]
+            temp_result["skills"] = vacancy.skills.names()
+            temp_result["college_name"] = vacancy.college.user.username
+            temp_result["location"] = vacancy.college.location
+            temp_result["website"] = vacancy.college.website
+            flag = False
+            if (RecruitmentCommitteeInfoModel.objects.filter(vacancy = vacancy).exists()):
+                flag = True
+            temp_result ["recruitment_committee"] = flag
+            result.append(temp_result)
+        return Response({"vacancies" : result}, status = 200)
+
+    # Method to post a new vacancy using college name or user name of the college.
+    def post(self, request, college_name, format = None):
         user = User.objects.get(username = college_name)
         college = CollegeInfoModel.objects.get(user = user)
-        if (EmployeeInfoModel.objects.filter(college = college, empid = empid).exists()):
-            employee = EmployeeInfoModel.objects.get(college = college, empid = empid)
-            temp_result = employee.__dict__
-            del temp_result["_state"]
-            return Response({"employee" : temp_result}, status = 200)
-        else:
-            return Response({"mssg" : "employee does not exists!"}, status = 404)
+        employees = EmployeeInfoModel.objects.filter(college = college)
+        request.data["college"] = college
+        temp = request.data["skills"]
+        del request.data["skills"]
+        vacancy = VacanciesInfoModel.objects.create(**request.data)
+        for skill in temp:
+            vacancy.skills.add(skill)
+        for employee in employees:
+            message_name = "Vacancy Created"
+            message_email = "rapidrecruits1.0@gmail.com"
+            message = "Dear all, Vacancy for {} has been created".format(vacancy.title)
+            send_mail(
+                message_name,#subject
+                message,#message
+                message_email,#from email
+                [employee.email],#to email   
+            )
+        return Response({"mssg": "Vacancy posted successfully!"}, status = 201)
+
+    # Method to update the details of a particular vacancy using college name and id of the vacancy.
+    def put(self, request, college_name, format = None):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        vacancy = VacanciesInfoModel.objects.get(college = college, id = request.data["id"])
+        vacancy.title = request.data["title"]
+        vacancy.type = request.data["type"]
+        vacancy.experience = request.data["experience"]
+        vacancy.date_of_posting = request.data["date_of_posting"]
+        vacancy.state = request.data["state"]
+        vacancy.description = request.data["description"]
+        vacancy.responsibilities = request.data["responsibilities"]
+        vacancy.qualifications = request.data["qualifications"]
+        vacancy.skills.clear()
+        for skill in request.data["skills"]:
+            vacancy.skills.add(skill)
+        vacancy.compensation = request.data["compensation"]
+        vacancy.save()
+        return Response({"mssg": "vacancy details updated successfully!"}, status = 204)
+
+    # Method to delete a particular vacancy using college name and id.
+    def delete(self, request, college_name, format = None):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        vacancy = VacanciesInfoModel.objects.get(college = college, id = request.data["id"])
+        vacancy.delete()
+        return Response({"mssg": "Vacancy deleted successfully!"}, status = 200)
+
+
+class ExperienceAPIView(APIView):
+
+    def get(self, request, username, format = None):
+        applicant = User.objects.get(username = username)
+        experiences = ApplicantExperienceModel.objects.filter(applicant = applicant)
+        result = []
+        for experience in experiences:
+            temp_result = {}
+            temp_result["designation"] = experience.designation
+            temp_result["from_date"] = experience.from_date
+            temp_result["to_date"] = experience.to_date
+            temp_result["institute"] = experience.institute
+            temp_result["details"] = experience.details
+            result.append(temp_result)
+        return Response({"data" : result}, status = 200)
+
+    def post(self, request, username, format = None):
+        user = User.objects.get(username = username)
+        request.data["applicant"] = user
+        ApplicantExperienceModel.objects.create(**request.data)
+        return Response({"mssg" : "experience added successfully"}, status = 202)
+
+
+    def put(self, request, username, format = None):
+        applicant = User.objects.get(username = username)
+        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
+        experience.designation = request.data["designation"]
+        experience.from_date = request.data["from_date"]
+        experience.to_date = request.data["to_date"]
+        experience.institute = request.data["institute"]
+        experience.details = request.data["details"]
+        experience.save()
+        return Response({"mssg" : "experience updated successfully"}, status = 204)
+
+
+    def delete(self, request, username, format = None):
+        applicant = User.objects.get(username = username)
+        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
+        experience.delete()
+        return Response({"mssg": "experience deleted successfully"}, status = 200)
+
+
+# RESTRICTED SNIPPETS!
+
+        # if (pk == None):
+        #     applicants = ApplicantInfoModel.objects.all()
+        #     result = []
+        #     for applicant in applicants:
+        #         temp_result = {}
+        #         temp_result["id"] =
+        #         temp_result["username"] = applicant.user.username
+        #         temp_result["email"] = applicant.user.email
+        #         temp_result["description"] = applicant.description
+        #         temp_result["full_name"] = applicant.full_name
+        #         temp_result["DOB"] = applicant.DOB
+        #         temp_result["gender"] = applicant.gender
+        #         temp_result["address"] = applicant.address
+        #         temp_result["state"] = applicant.state
+        #         temp_result["pincode"] = applicant.pincode
+        #         temp_result["category"] = applicant.category
+        #         temp_result["marital_status"] = applicant.marital_status
+        #         temp_result["phone_number"] = applicant.phone_number
+        #         temp_result["total_experience"] = applicant.total_experience
+        #         temp_result["skillset"] = applicant.skillset
+        #         result.append(temp_result)
+        #     return Response(result, status = 200)
+
+        # else:
+
+#Send Email
+
+class RecruitmentCommitteeAPIView(APIView):
+    def get(self, request, college_name, id, format = None):
+        vacancy=VacanciesInfoModel.objects.get(id=id)
+        committee=RecruitmentCommitteeInfoModel.objects.get(vacancy=vacancy)
+        first_user = committee.first_user
+        second_user = committee.second_user
+        third_user = committee.third_user
+        fourth_user = committee.fourth_user
+        fifth_user = committee.fifth_user
+        # id,empid,name,designation,department
+        committee_members=[]
+        committee_members.append(first_user)
+        committee_members.append(second_user)
+        committee_members.append(third_user)
+        committee_members.append(fourth_user)
+        committee_members.append(fifth_user)
+        result = []
+        for member in committee_members:
+            temp_result = {}
+            temp_result["id"]=member.id
+            temp_result["empid"]=member.empid
+            temp_result["name"]=member.name
+            temp_result["email"]=member.email   
+            temp_result["phone_number"]=member.phone_number      
+            temp_result["designation"]=member.designation
+            temp_result["department"]=member.department
+            result.append(temp_result)
+        return Response({"data" : result}, status = 200)
+
+
+    def post(self,request,college_name,id,format = None):
+        first_user=EmployeeInfoModel.objects.get(id=request.data["first"])
+        second_user=EmployeeInfoModel.objects.get(id=request.data["second"])
+        third_user=EmployeeInfoModel.objects.get(id=request.data["third"])
+        fourth_user=EmployeeInfoModel.objects.get(id=request.data["forth"])
+        fifth_user=EmployeeInfoModel.objects.get(id=request.data["fifth"])
+        vacancy=VacanciesInfoModel.objects.get(id=id)
+        result={"first_user":first_user,"second_user":second_user,"third_user":third_user,"fourth_user":fourth_user,"fifth_user":fifth_user,"vacancy":vacancy}
+        RecruitmentCommitteeInfoModel.objects.create(**result)
+        message_name = "Member of recruitement Committee"
+        message_email = "rapidrecruits1.0@gmail.com"
+        message = "Dear all, You have been added as the member of Recruitment Committee for the Vacancy {} , Vacancy Id {}".format(vacancy.title,vacancy.id)
+        send_mail(
+            message_name,#subject
+            message,#message
+            message_email,#from email
+            [first_user.email,second_user.email,third_user.email,fourth_user.email,fifth_user.email,]#to email
+        )
+        return Response({"mssg" : "committee added successfully"}, status = 202)
+
+
+    def put(self, request, college_name, id, format = None):
+        first_user = EmployeeInfoModel.objects.get(id = request.data["first"])
+        second_user = EmployeeInfoModel.objects.get(id = request.data["second"])
+        third_user = EmployeeInfoModel.objects.get(id = request.data["third"])
+        fourth_user = EmployeeInfoModel.objects.get(id = request.data["forth"])
+        fifth_user = EmployeeInfoModel.objects.get(id = request.data["fifth"])
+        vacancy = VacanciesInfoModel.objects.get(id = id)
+        recruitment_committee = RecruitmentCommitteeInfoModel.objects.get(vacancy = vacancy)
+        recruitment_committee.delete()
+        result={"first_user" : first_user, "second_user" : second_user, "third_user" : third_user, "fourth_user" : fourth_user, "fifth_user" : fifth_user, "vacancy" : vacancy}
+        RecruitmentCommitteeInfoModel.objects.create(**result)
+        message_name = "Member of recruitement Committee"
+        message_email = "rapidrecruits1.0@gmail.com"
+        message = "Dear all, You have been added as the member of Recruitment Committee for the Vacancy {} , Vacancy Id {}".format(vacancy.title,vacancy.id)
+        send_mail(
+            message_name,#subject
+            message,#message
+            message_email,#from email
+            [first_user.email,second_user.email,third_user.email,fourth_user.email,fifth_user.email]#to email
+        )
+        return Response({"mssg" : "committee updated successfully"}, status = 204)
