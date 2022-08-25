@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from datetime import *
 # Create your views here.
 
+# DOCUMENTATION DONE!
 class ApplicantAPIView(APIView):
     # Method to fetch the details of an applicant using username.
     def get(self, request, username, format = None):
@@ -223,3 +224,117 @@ class QualificationAPIView(APIView):
         qualification = ApplicantQualificationModel.objects.get(applicant = applicant, qualification_title = request.data["qualification_title"])
         qualification.delete()
         return Response({"mssg": "qualification deleted successfully"}, status = 200)
+
+
+# DOCUMENTATION DONE!
+class EmployeeAPIView(APIView):
+
+    # Method to fetch the data of all the employees of the particular college using college name.
+    def get(self, request, college_name, format = None):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        employees = EmployeeInfoModel.objects.filter(college = college)
+        result = []
+        for employee in employees:
+            temp_result = {}
+            temp = employee.__dict__
+            print (temp)
+            for key in temp:
+                # This state is the reference object to the college.
+                if (key == "_state"):
+                    continue
+                temp_result[key] = temp[key]
+            result.append(temp_result)
+            dob_year = (datetime.strptime(employee.DOB,"%d/%m/%Y")).year
+            dob_month = (datetime.strptime(employee.DOB,"%d/%m/%Y")).month
+            dob_date = (datetime.strptime(employee.DOB,"%d/%m/%Y")).day
+            # print(dob_year,dob_date,dob_month,date.today().year,date.today().day,date.today().month)
+            if dob_month >=1 and dob_month<=3 and date.today().day == dob_date and date.today().year == dob_year + 59 and date.today().month == dob_month + 9 :
+                message_name = "Initiate recruitment process"
+                message_email = "rapidrecruits1.0@gmail.com"
+                message = "Dear all, Mr./Mrs. {} is about to leave/retire from their position please initiate recruitment process".format(employee.name)
+                send_mail(
+                    message_name,#subject
+                    message,#message
+                    message_email,#from email
+                    [college.director_mail, college.registrar_mail, college.hod_mail, employee.email, college.user.email],#to email
+                )
+            elif dob_month >=4 and dob_month<=12 and date.today().day == dob_date and date.today().year == dob_year + 60 and date.today().month == dob_month - 3:
+                message_name = "Initiate recruitment process"
+                message_email = "rapidrecruits1.0@gmail.com"
+                message = "Dear all, Mr./Mrs. {} is about to leave/retire from their position please initiate recruitment process".format(employee.name)
+                send_mail(
+                    message_name,#subject
+                    message,#message
+                    message_email,#from email
+                    [college.director_mail, college.registrar_mail, college.hod_mail, employee.email, college.user.email],#to email
+                )
+        result = sorted(result, key = lambda x : x["name"].lower())
+        return Response({"employees" : result}, status = 200)
+
+    # Method to post the data of the employees of a college using excel sheet or by using manual method using college name.
+    def post(self, request, college_name, format = None):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        if (request.data["method"] == "excel file"):
+            wb_obj = openpyxl.load_workbook(request.FILES["details"])
+            sheet_obj = wb_obj.active
+            row = sheet_obj.max_row
+            column = sheet_obj.max_column
+            count = 0
+            print (row, column, sheet_obj.cell(row = 2, column = 1).value)
+            keys = ["college", "empid", "name", "DOB", "gender", "category", "status", "designation", "department", "email", "phone_number"]
+            for i in range(2, row + 1):
+                values = [college]
+                for j in range(1, column + 1):
+                    values.append(sheet_obj.cell(row = i, column = j).value)
+                comb_list = zip(keys, values)
+                data = dict(comb_list)
+                if (data["name"] == None):
+                    break
+                EmployeeInfoModel.objects.create(**data)
+                count += 1
+            return Response({"mssg": "{} number of records created".format(count)}, status = 201)
+        elif (request.data["method"] == "manual"):
+            request.data["details"]["college"] = college
+            EmployeeInfoModel.objects.create(**request.data["details"])
+            return Response({"mssg": "employee added successfully!"}, status = 201)
+
+    # Method to update the data of the employee using college name a.k.a. username and the employee id as there is no other unique parameter to be used.
+    def put(self, request, college_name, format = None):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        employee = EmployeeInfoModel.objects.get(college = college, id = request.data["id"])
+        flag = 0
+        if (employee.status == "Non Active"):
+            flag = 1
+        employee.name = request.data["name"]
+        employee.DOB = request.data["DOB"]
+        employee.gender = request.data["gender"]
+        employee.category = request.data["category"]
+        employee.status = request.data["status"]
+        employee.email = request.data["email"]
+        employee.phone_number = request.data["phone_number"]
+        employee.designation = request.data["designation"]
+        employee.empid = request.data["empid"]
+        employee.department = request.data["department"]
+        employee.save()
+        if (request.data["status"] == "Non Active" and flag == 0):
+            message_name = "Initiate recruitment process"
+            message_email = "rapidrecruits1.0@gmail.com"
+            message = "Dear all, Mr./Mrs. {} is about to leave/retire from their position please initiate recruitment process".format(employee.name)
+            send_mail(
+                message_name,#subject
+                message,#message
+                message_email,#from email
+                [college.director_mail, college.registrar_mail, college.hod_mail, employee.email, college.user.email],#to email
+            )
+        return Response({"mssg": "employee details updated successfully"}, status = 204)
+
+    # Method to delete the record of an employee using college name and id of the employee.
+    def delete(self, request, college_name, format = None):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        employee = EmployeeInfoModel.objects.get(college = college, id = request.data["id"])
+        employee.delete()
+        return Response({"mssg": "employee deleted successfully!"}, status = 200)
