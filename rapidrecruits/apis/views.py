@@ -225,6 +225,48 @@ class QualificationAPIView(APIView):
         qualification.delete()
         return Response({"mssg": "qualification deleted successfully"}, status = 200)
 
+class ExperienceAPIView(APIView):
+
+    def get(self, request, username, format = None):
+        applicant = User.objects.get(username = username)
+        experiences = ApplicantExperienceModel.objects.filter(applicant = applicant)
+        result = []
+        for experience in experiences:
+            temp_result = {}
+            temp_result["designation"] = experience.designation
+            temp_result["from_date"] = experience.from_date
+            temp_result["to_date"] = experience.to_date
+            temp_result["institute"] = experience.institute
+            temp_result["details"] = experience.details
+            result.append(temp_result)
+        return Response({"data" : result}, status = 200)
+
+    def post(self, request, username, format = None):
+        user = User.objects.get(username = username)
+        request.data["applicant"] = user
+        ApplicantExperienceModel.objects.create(**request.data)
+        return Response({"mssg" : "experience added successfully"}, status = 202)
+
+
+    def put(self, request, username, format = None):
+        applicant = User.objects.get(username = username)
+        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
+        experience.designation = request.data["designation"]
+        experience.from_date = request.data["from_date"]
+        experience.to_date = request.data["to_date"]
+        experience.institute = request.data["institute"]
+        experience.details = request.data["details"]
+        experience.save()
+        return Response({"mssg" : "experience updated successfully"}, status = 204)
+
+
+    def delete(self, request, username, format = None):
+        applicant = User.objects.get(username = username)
+        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
+        experience.delete()
+        return Response({"mssg": "experience deleted successfully"}, status = 200)
+
+
 
 # DOCUMENTATION DONE!
 class EmployeeAPIView(APIView):
@@ -339,43 +381,30 @@ class EmployeeAPIView(APIView):
         employee.delete()
         return Response({"mssg": "employee deleted successfully!"}, status = 200)
 
-class ExperienceAPIView(APIView):
 
-    def get(self, request, username, format = None):
-        applicant = User.objects.get(username = username)
-        experiences = ApplicantExperienceModel.objects.filter(applicant = applicant)
-        result = []
-        for experience in experiences:
-            temp_result = {}
-            temp_result["designation"] = experience.designation
-            temp_result["from_date"] = experience.from_date
-            temp_result["to_date"] = experience.to_date
-            temp_result["institute"] = experience.institute
-            temp_result["details"] = experience.details
-            result.append(temp_result)
-        return Response({"data" : result}, status = 200)
-
-    def post(self, request, username, format = None):
-        user = User.objects.get(username = username)
-        request.data["applicant"] = user
-        ApplicantExperienceModel.objects.create(**request.data)
-        return Response({"mssg" : "experience added successfully"}, status = 202)
+# DOCUMENTATION DONE!
+# Method to get the employee data using the college name and the employee id. We need to mention get in the square brackets else nothing will work.
+@api_view(["GET"])
+def get_employee_by_id(request, college_name, id):
+    if (request.method == "GET"):
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        employee = EmployeeInfoModel.objects.get(college = college, id = id)
+        temp_result = employee.__dict__
+        del temp_result["_state"]
+        return Response({"employee" : temp_result}, status = 200)
 
 
-    def put(self, request, username, format = None):
-        applicant = User.objects.get(username = username)
-        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
-        experience.designation = request.data["designation"]
-        experience.from_date = request.data["from_date"]
-        experience.to_date = request.data["to_date"]
-        experience.institute = request.data["institute"]
-        experience.details = request.data["details"]
-        experience.save()
-        return Response({"mssg" : "experience updated successfully"}, status = 204)
-
-
-    def delete(self, request, username, format = None):
-        applicant = User.objects.get(username = username)
-        experience = ApplicantExperienceModel.objects.get(applicant = applicant, institute = request.data["institute"])
-        experience.delete()
-        return Response({"mssg": "experience deleted successfully"}, status = 200)
+@api_view(["GET"])
+def get_employee_by_empid(request, college_name, empid):
+    if (request.method == "GET"):
+        print (college_name, empid)
+        user = User.objects.get(username = college_name)
+        college = CollegeInfoModel.objects.get(user = user)
+        if (EmployeeInfoModel.objects.filter(college = college, empid = empid).exists()):
+            employee = EmployeeInfoModel.objects.get(college = college, empid = empid)
+            temp_result = employee.__dict__
+            del temp_result["_state"]
+            return Response({"employee" : temp_result}, status = 200)
+        else:
+            return Response({"mssg" : "employee does not exists!"}, status = 404)
